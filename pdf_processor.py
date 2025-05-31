@@ -161,24 +161,30 @@ class PDFProcessor:
         return treatments_found
     
     def extract_lesion_data(self, pdf_path: str) -> List[Dict]:
-        """Main method to extract all lesion data from a PDF"""
+        """Main method to extract all lesion data from a PDF using OpenAI enhancement"""
         try:
             # Extract text from PDF
             text = self.extract_text_from_pdf(pdf_path)
             
-            # Extract exam date
+            # Try OpenAI-enhanced extraction first
+            try:
+                extracted_data = self.openai_processor.extract_medical_data_from_text(text, pdf_path)
+                validated_data = self.openai_processor.validate_and_clean_data(extracted_data)
+                
+                if validated_data['lesoes'] and validated_data['data_exame']:
+                    return self.openai_processor.convert_to_standard_format(validated_data, pdf_path)
+            except Exception as openai_error:
+                print(f"OpenAI extraction failed, using fallback: {str(openai_error)}")
+            
+            # Fallback to regex-based extraction
             exam_date = self.extract_date(text)
             if not exam_date:
-                raise Exception("Data do exame não encontrada no PDF")
-            
-            # Extract lesions
-            lesions = self.extract_lesions(text)
-            if not lesions:
-                # Return empty list instead of raising exception
-                # This allows processing to continue with other files
                 return []
             
-            # Detect treatment context
+            lesions = self.extract_lesions(text)
+            if not lesions:
+                return []
+            
             treatments = self.detect_treatment_context(text)
             
             # Build data structure
@@ -188,7 +194,8 @@ class PDFProcessor:
                     'lesao_id': lesion_id,
                     'data_exame': exam_date,
                     'tamanho_cm': size_cm,
-                    'tratamentos': treatments if treatments else []
+                    'tratamentos': treatments if treatments else [],
+                    'source_file': pdf_path
                 }
                 lesion_data.append(data_point)
             

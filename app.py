@@ -6,6 +6,7 @@ from pdf_processor import PDFProcessor
 from data_analyzer import DataAnalyzer
 from visualization import VisualizationGenerator
 from utils import format_summary_table, format_detailed_table
+from database import DatabaseManager
 import io
 
 def main():
@@ -17,8 +18,13 @@ def main():
     
     st.title("🏥 Análise de Evolução de Lesões Oncológicas")
     st.markdown("**Sistema de análise de laudos médicos em PDF para acompanhamento da evolução de lesões ao longo do tempo**")
+    st.markdown("*Processamento inteligente com IA da OpenAI para extração precisa de dados médicos*")
     
-    # Initialize session state
+    # Initialize database and session state
+    if 'db_manager' not in st.session_state:
+        st.session_state.db_manager = DatabaseManager()
+    if 'current_patient' not in st.session_state:
+        st.session_state.current_patient = None
     if 'processed_data' not in st.session_state:
         st.session_state.processed_data = None
     if 'analysis_results' not in st.session_state:
@@ -26,21 +32,65 @@ def main():
     if 'charts_generated' not in st.session_state:
         st.session_state.charts_generated = False
     
-    # Sidebar for file upload
+    # Sidebar for patient selection and file upload
     with st.sidebar:
+        st.header("👤 Gestão de Pacientes")
+        
+        # Patient selection/creation
+        patient_id = st.text_input(
+            "ID do Paciente",
+            value=st.session_state.current_patient or "",
+            help="Digite um ID único para o paciente"
+        )
+        
+        patient_name = st.text_input(
+            "Nome do Paciente (opcional)",
+            help="Nome para identificação do paciente"
+        )
+        
+        if patient_id:
+            if st.button("📋 Selecionar/Criar Paciente"):
+                st.session_state.current_patient = patient_id
+                st.session_state.db_manager.save_patient(patient_id, patient_name)
+                st.success(f"Paciente {patient_id} selecionado")
+                st.rerun()
+        
+        st.divider()
+        
+        # Patient data management
+        if st.session_state.current_patient:
+            st.info(f"Paciente ativo: {st.session_state.current_patient}")
+            
+            if st.button("📊 Carregar Dados Existentes"):
+                load_patient_data(st.session_state.current_patient)
+            
+            if st.button("🗑️ Limpar Dados do Paciente", type="secondary"):
+                if st.session_state.db_manager.delete_patient_data(st.session_state.current_patient):
+                    st.success("Dados removidos com sucesso")
+                    st.session_state.processed_data = None
+                    st.session_state.analysis_results = None
+                    st.rerun()
+        
+        st.divider()
+        
         st.header("📁 Upload de Laudos")
+        
+        if not st.session_state.current_patient:
+            st.warning("Selecione um paciente antes de fazer upload dos laudos")
+        
         uploaded_files = st.file_uploader(
             "Selecione os arquivos PDF dos laudos médicos",
             type=['pdf'],
             accept_multiple_files=True,
-            help="Faça upload de múltiplos laudos médicos em PDF de um mesmo paciente"
+            help="Faça upload de múltiplos laudos médicos em PDF",
+            disabled=not st.session_state.current_patient
         )
         
-        if uploaded_files:
+        if uploaded_files and st.session_state.current_patient:
             st.success(f"✅ {len(uploaded_files)} arquivo(s) carregado(s)")
             
             if st.button("🔍 Processar Laudos", type="primary"):
-                process_files(uploaded_files)
+                process_files(uploaded_files, st.session_state.current_patient)
     
     # Main content area
     if st.session_state.processed_data is not None and st.session_state.analysis_results is not None:
@@ -48,7 +98,24 @@ def main():
     else:
         display_instructions()
 
-def process_files(uploaded_files):
+def load_patient_data(patient_id: str):
+    """Load existing patient data from database"""
+    try:
+        df = st.session_state.db_manager.get_patient_data(patient_id)
+        if not df.empty:
+            data_analyzer = DataAnalyzer()
+            analysis_results = data_analyzer.analyze_lesion_evolution(df)
+            
+            st.session_state.processed_data = df
+            st.session_state.analysis_results = analysis_results
+            st.success(f"Dados carregados: {len(df)} medições de {analysis_results['analysis_metadata']['total_lesions']} lesões")
+            st.rerun()
+        else:
+            st.warning("Nenhum dado encontrado para este paciente")
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {str(e)}")
+
+def process_files(uploaded_files, patient_id: str):
     """Process uploaded PDF files and analyze lesion data"""
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -72,8 +139,12 @@ def process_files(uploaded_files):
                 # Extract data from PDF
                 file_data = pdf_processor.extract_lesion_data(tmp_file_path)
                 if file_data:
+                    # Add source file info
+                    for data_point in file_data:
+                        data_point['source_file'] = uploaded_file.name
+                    
                     all_data.extend(file_data)
-                    st.success(f"✅ {uploaded_file.name}: {len(file_data)} medições extraídas")
+                    st.success(f"✅ {uploaded_file.name}: {len(file_data)} medições extraídas com IA")
                 else:
                     st.warning(f"⚠️ {uploaded_file.name}: Nenhuma medição encontrada")
             except Exception as e:
@@ -85,12 +156,27 @@ def process_files(uploaded_files):
             progress_bar.progress((i + 1) / len(uploaded_files))
         
         if all_data:
-            # Convert to DataFrame
+            # Save to database
+            status_text.text("Salvando dados no banco...")
+            if st.session_state.db_manager.save_lesion_data(patient_id, all_data):
+                st.success("Dados salvos no banco de dados")
+            
+            # Convert to DataFrame and analyze
             df = pd.DataFrame(all_data)
+            
+            # Combine with existing data from database
+            existing_df = st.session_state.db_manager.get_patient_data(patient_id)
+            if not existing_df.empty:
+                df = pd.concat([existing_df, df]).drop_duplicates(
+                    subset=['lesao_id', 'data_exame'], keep='last'
+                ).reset_index(drop=True)
             
             # Analyze data
             status_text.text("Analisando dados e calculando variações...")
             analysis_results = data_analyzer.analyze_lesion_evolution(df)
+            
+            # Save analysis session
+            st.session_state.db_manager.save_analysis_session(patient_id, analysis_results)
             
             # Store results in session state
             st.session_state.processed_data = df
