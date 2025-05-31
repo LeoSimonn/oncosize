@@ -3,19 +3,23 @@ import re
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 import logging
+from openai_text_processor import OpenAITextProcessor
 
 class PDFProcessor:
     """Handles PDF text extraction and medical data parsing"""
     
     def __init__(self):
-        # Patterns for date recognition (DD/MM/YYYY and YYYY-MM-DD)
+        # Initialize OpenAI processor for enhanced extraction
+        self.openai_processor = OpenAITextProcessor()
+        
+        # Fallback patterns for date recognition (DD/MM/YYYY and YYYY-MM-DD)
         self.date_patterns = [
             r'(?:Data\s+do\s+[Ee]xame|Data|Exame)[:\s]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{4})',
             r'(\d{1,2}[/\-]\d{1,2}[/\-]\d{4})',
             r'(\d{4}[/\-]\d{1,2}[/\-]\d{1,2})'
         ]
         
-        # Patterns for lesion identification and measurement
+        # Fallback patterns for lesion identification and measurement
         self.lesion_patterns = [
             # Lesão A: 1,2 cm
             r'([Ll]es[ãa]o\s+[A-Za-z0-9]+)[:\s]*([0-9]+[,\.][0-9]+)\s*(cm|mm)',
