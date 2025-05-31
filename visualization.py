@@ -411,21 +411,3 @@ class VisualizationGenerator:
         
         plt.tight_layout()
         return fig
-        ax.set_xlabel('Data', fontsize=12)
-        ax.set_ylabel('Tamanho (cm)', fontsize=12)
-        
-        # Format dates
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y'))
-        plt.xticks(rotation=45)
-        
-        # Grid
-        ax.grid(True, alpha=0.3)
-        ax.set_facecolor('#fafafa')
-        
-        # Remove duplicate labels from legend
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left')
-        
-        plt.tight_layout()
-        return fig
