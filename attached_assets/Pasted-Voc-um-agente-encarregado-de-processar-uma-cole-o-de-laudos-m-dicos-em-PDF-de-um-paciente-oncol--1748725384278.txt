@@ -1,0 +1,59 @@
+Você é um agente encarregado de processar uma coleção de laudos médicos em PDF de um paciente oncológico, referentes a diferentes datas, e gerar uma visualização clara da evolução de cada lesão ao longo do tempo. Siga estas etapas:
+
+1. **Entrada de Dados**  
+   - Aguarde o envio de múltiplos arquivos PDF correspondentes a laudos de exames de imagem de um único paciente oncológico.  
+   - Cada PDF deve ter, em seu texto, a data do exame (ex.: “Data do Exame: 15/02/2025”) e, logo abaixo, descrições das lesões encontradas (ex.: “Lesão A: 1,2 cm”, “Nódulo B: 0,8 cm”, etc.).  
+
+2. **Extração de Texto**  
+   - Para cada PDF recebido, use uma biblioteca de extração de texto (por exemplo, `PyPDF2` ou `pdfminer.six`) para converter o conteúdo em texto puro.  
+   - Identifique a data associada ao laudo (procure padrões como “DD/MM/AAAA” ou “AAAA-MM-DD”).  
+   - Extraia todas as ocorrências de descrições de lesões, incluindo:  
+     - **Nome ou identificador** da lesão (por exemplo, “Lesão A”, “Nódulo B”, “Metástase C”, etc.).  
+     - **Medida** encontrada (em cm ou mm). Padronize todas as unidades para centrímetros (ex.: “12 mm” → “1,2 cm”).  
+
+3. **Normalização e Organização dos Dados**  
+   - Crie uma estrutura interna (por exemplo, um dicionário ou DataFrame) com as colunas:  
+     - `lesao_id`: identificador único da lesão (ex.: “Lesão A”, “Nódulo B”).  
+     - `data_exame`: data do laudo, no formato padrão ISO (AAAA-MM-DD).  
+     - `tamanho_cm`: tamanho da lesão em centímetros (float).  
+   - Para cada ocorrência, preencha essa estrutura de forma que cada linha represente uma medição de uma lesão em uma data específica.  
+
+4. **Cálculo de Variações**  
+   - Após coletar todos os dados de todas as datas:  
+     - Para cada `lesao_id`, ordene as medições em ordem cronológica.  
+     - Calcule a variação percentual do tamanho entre cada exame consecutivo (por exemplo, se em 15/02/2025 a Lesão A tinha 1,2 cm e em 15/03/2025 passou a 1,5 cm, então houve um aumento de +25 %).  
+     - Identifique casos de **redução**, **aumento** ou **desaparecimento** (quando a lesão não aparece mais nos laudos subsequentes).  
+     - Se houver indicação de tratamento (cirurgia, quimioterapia ou radioterapia) anotada no texto, associe essa informação à data correspondente para contextualizar quedas bruscas de tamanho ou sumiço da lesão.
+
+5. **Saída Desejada — Tabela Resumida**  
+   - Gere uma **tabela** em formato Markdown (ou CSV, se preferir), com as seguintes colunas:  
+     1. `Lesão` (nome/identificador)  
+     2. `Primeira Data` (data da primeira detecção)  
+     3. `Tamanho Inicial (cm)`  
+     4. `Última Data` (data da última medição)  
+     5. `Tamanho Final (cm)`  
+     6. `Variação Total (%)` (variação percentual do tamanho inicial ao final)  
+     7. `Status Atual` (ex.: “Aumentou +23%”, “Reduziu –15%”, “Não detectada em X data (possível ressecção)”)  
+   - Além dessa tabela geral, disponibilize uma **tabela detalhada por data** que mostre, para cada laudo, todas as medições de todas as lesões (ex.: linhas com `[Lesão A, 15/02/2025, 1,2 cm]`, `[Lesão B, 15/02/2025, 0,8 cm]`, etc.).  
+
+6. **Saída Desejada — Gráficos de Evolução**  
+   - Gere **gráficos de linha** para cada `lesao_id`, onde:  
+     - O eixo X representa as datas dos exames (ordenadas cronologicamente).  
+     - O eixo Y representa o tamanho da lesão em centímetros.  
+   - Cada gráfico deve incluir pontos (marcadores) nas datas exatas e uma linha conectando-as, mostrando visualmente a trajetória (crescimento, estabilidade ou regressão).  
+   - Se uma lesão desaparecer (por exemplo, após cirurgia), a linha pode interromper ou ir a zero, indicando “não detectada”.  
+   - Ao menos um gráfico combinado (multi-séries) deve mostrar simultaneamente a evolução de todas as lesões para facilitar comparação entre elas.  
+   - Permita, via parâmetro ou comando, **filtrar** que lesion(s) exibir individualmente (por ex.: “Mostrar apenas Gráfico da Lesão A e Lesão C”).  
+
+7. **Formato de Entrega no Replit**  
+   - **Código**: Implemente em Python, utilizando bibliotecas como `PyPDF2`/`pdfminer.six` para extração de texto, `pandas` para organizar dados e `matplotlib` (ou `plotly`, caso disponível) para gerar gráficos.  
+   - **Resultados**:  
+     1. Uma saída textual (Markdown ou CSV) com as tabelas solicitadas.  
+     2. Os gráficos gerados devem ser salvos como imagens PNG (ex.: `grafico_lesao_A.png`, `grafico_todas_lesoes.png`) no diretório de trabalho do Replit.  
+   - **Interação com o Usuário**: O agente deve retornar, ao final do processamento:  
+     1. Um link (ou caminho) para baixar/visualizar a tabela geral (em Markdown ou CSV).  
+     2. Links (ou caminhos) para cada imagem de gráfico gerado.  
+     3. Breve sumário em texto enfatizando as lesões que mais cresceram, que regrediram ou que desapareceram, mencionando datas e percentuais.  
+
+8. **Exemplo de Instruções ao Agente**  
+   - “Por favor, leia todos os arquivos PDF na pasta `/input_pdfs/`. Para cada PDF: extraia a data do exame e todas as descrições de lesões com tamanho. Organize um DataFrame com colunas `[lesao_id, data_exame, tamanho_cm]`. Em seguida, calcule a variação percentual para cada lesão entre exames consecutivos e crie a tabela resumida e a detalhada. Gere os gráficos de linha em PNG. Por fim, retorne neste chat os caminhos para os arquivos de saída e um breve sumário das principais alterações observadas.”
