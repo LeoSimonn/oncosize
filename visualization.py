@@ -47,9 +47,12 @@ class VisualizationGenerator:
         dates = pd.to_datetime(lesion_data['data_exame'])
         sizes = lesion_data['tamanho_cm']
         
+        # Add treatment periods as background
+        self._add_treatment_periods(ax)
+        
         # Plot main line and points
         ax.plot(dates, sizes, marker='o', linewidth=2.5, markersize=8, 
-                color=self.color_palette[0], label=lesion_name)
+                color=self.color_palette[0], label=lesion_name, zorder=5)
         
         # Add data point labels
         for i, (date, size) in enumerate(zip(dates, sizes)):
@@ -59,7 +62,8 @@ class VisualizationGenerator:
                        xytext=(0, 15), 
                        ha='center',
                        fontsize=9,
-                       bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.7))
+                       bbox=dict(boxstyle="round,pad=0.3", facecolor='white', alpha=0.8),
+                       zorder=6)
         
         # Highlight significant changes
         self._highlight_significant_changes(ax, dates, sizes)
@@ -88,6 +92,54 @@ class VisualizationGenerator:
         plt.tight_layout()
         return fig
     
+    def _add_treatment_periods(self, ax):
+        """Add treatment periods as colored background regions"""
+        import streamlit as st
+        
+        # Check if treatment periods are available in session state
+        if not st.session_state.get('treatment_periods'):
+            return
+        
+        # Get y-axis limits for background shading
+        y_min, y_max = ax.get_ylim()
+        
+        # Treatment type colors
+        treatment_colors = {
+            'Quimioterapia': '#ffcccc',
+            'Radioterapia': '#ccffcc', 
+            'Imunoterapia': '#ccccff',
+            'Terapia Direcionada': '#ffffcc',
+            'Hormonioterapia': '#ffccff',
+            'Cirurgia': '#ccffff',
+            'Outro': '#f0f0f0'
+        }
+        
+        for i, treatment in enumerate(st.session_state.treatment_periods):
+            try:
+                start_date = pd.to_datetime(treatment['data_inicio'])
+                end_date = pd.to_datetime(treatment['data_fim']) if treatment['data_fim'] else pd.Timestamp.now()
+                
+                # Get color for treatment type
+                color = treatment_colors.get(treatment['tipo'], treatment_colors['Outro'])
+                
+                # Add background span
+                ax.axvspan(start_date, end_date, alpha=0.3, color=color, zorder=1)
+                
+                # Add treatment label
+                mid_date = start_date + (end_date - start_date) / 2
+                label_text = f"{treatment['tipo']}"
+                if treatment['medicamento']:
+                    label_text = f"{treatment['tipo']}\n({treatment['medicamento']})"
+                
+                # Add text annotation at the top
+                ax.text(mid_date, y_max * 0.95, label_text, 
+                       ha='center', va='top', fontsize=8,
+                       bbox=dict(boxstyle="round,pad=0.3", facecolor=color, alpha=0.8),
+                       rotation=0, zorder=10)
+                       
+            except Exception as e:
+                continue
+    
     def create_combined_chart(self, detailed_data: pd.DataFrame, 
                             selected_lesions: List[str]) -> plt.Figure:
         """Create combined chart showing evolution of multiple lesions"""
@@ -103,6 +155,9 @@ class VisualizationGenerator:
         
         # Create figure
         fig, ax = plt.subplots(figsize=(14, 10))
+        
+        # Add treatment periods as background first
+        self._add_treatment_periods(ax)
         
         # Plot each lesion
         for i, lesion_id in enumerate(selected_lesions):
@@ -297,39 +352,65 @@ class VisualizationGenerator:
         except Exception as e:
             raise Exception(f"Erro ao salvar gráfico: {str(e)}")
     
-    def create_timeline_chart(self, detailed_data: pd.DataFrame) -> plt.Figure:
+    def create_timeline_chart(self, detailed_data: pd.DataFrame):
         """Create timeline chart showing all measurements chronologically"""
         
         if detailed_data.empty:
             return self._create_empty_chart("Sem dados para timeline")
         
-        fig, ax = plt.subplots(figsize=(16, 8))
+        # Sort by date
+        detailed_data = detailed_data.sort_values('data_exame')
         
-        # Group by date and create timeline
-        timeline_data = detailed_data.groupby('data_exame').agg({
-            'lesao_id': list,
-            'tamanho_cm': list
-        }).reset_index()
+        # Create figure
+        fig, ax = plt.subplots(figsize=(16, 10))
         
-        # Plot timeline
-        for i, row in timeline_data.iterrows():
-            date = row['data_exame']
-            lesions = row['lesao_id']
-            sizes = row['tamanho_cm']
+        # Add treatment periods as background first
+        self._add_treatment_periods(ax)
+        
+        # Get unique lesions
+        unique_lesions = detailed_data['lesao_id'].unique()
+        
+        # Create y-positions for each lesion
+        y_positions = {lesion: i for i, lesion in enumerate(unique_lesions)}
+        
+        # Plot each measurement as a point
+        for lesion in unique_lesions:
+            lesion_data = detailed_data[detailed_data['lesao_id'] == lesion]
+            dates = pd.to_datetime(lesion_data['data_exame'])
+            sizes = lesion_data['tamanho_cm']
             
-            # Create vertical line for each date
-            ax.axvline(x=date, color='lightgray', alpha=0.5, linewidth=1)
+            # Use consistent color
+            color = self.color_palette[y_positions[lesion] % len(self.color_palette)]
             
-            # Plot each lesion measurement for this date
-            for j, (lesion, size) in enumerate(zip(lesions, sizes)):
-                y_pos = j * 0.5  # Offset for multiple lesions on same date
-                ax.scatter(date, size, s=100, alpha=0.7, 
-                          label=lesion if i == 0 else "")
-                ax.text(date, size + 0.1, f'{lesion}\n{size:.2f}cm', 
-                       ha='center', va='bottom', fontsize=8)
+            # Plot points with higher zorder to appear over treatment periods
+            ax.scatter(dates, [y_positions[lesion]] * len(dates), 
+                      s=sizes * 100, alpha=0.8, color=color, label=lesion, zorder=5)
+            
+            # Add size labels
+            for date, size in zip(dates, sizes):
+                ax.annotate(f'{size:.1f}cm', 
+                           (date, y_positions[lesion]), 
+                           xytext=(5, 0), textcoords='offset points',
+                           va='center', fontsize=8, zorder=6)
         
         # Formatting
-        ax.set_title('Timeline de Todas as Medições', fontsize=16, fontweight='bold', pad=20)
+        ax.set_yticks(list(y_positions.values()))
+        ax.set_yticklabels(list(y_positions.keys()))
+        ax.set_xlabel('Data do Exame', fontsize=12)
+        ax.set_ylabel('Lesões', fontsize=12)
+        ax.set_title('Timeline de Todas as Medições com Períodos de Tratamento', fontsize=16, fontweight='bold')
+        
+        # Format dates
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y'))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+        plt.xticks(rotation=45)
+        
+        # Grid
+        ax.grid(True, alpha=0.3)
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+        plt.tight_layout()
+        return fig
         ax.set_xlabel('Data', fontsize=12)
         ax.set_ylabel('Tamanho (cm)', fontsize=12)
         
