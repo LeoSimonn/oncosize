@@ -31,7 +31,7 @@ class VisualizationGenerator:
             '#1abc9c', '#34495e', '#e67e22', '#95a5a6', '#8e44ad'
         ]
     
-    def create_individual_chart(self, lesion_data: pd.DataFrame, lesion_name: str) -> plt.Figure:
+    def create_individual_chart(self, lesion_data: pd.DataFrame, lesion_name: str):
         """Create individual evolution chart for a single lesion"""
         
         if lesion_data.empty:

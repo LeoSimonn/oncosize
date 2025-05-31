@@ -8,6 +8,7 @@ from visualization import VisualizationGenerator
 from utils import format_summary_table, format_detailed_table
 from synthetic_data_generator import SyntheticDataGenerator
 from lesion_grouper import LesionGrouper
+from treatment_manager import TreatmentManager
 import io
 
 def main():
@@ -199,6 +200,50 @@ def generate_full_demo_data():
     except Exception as e:
         st.error(f"Erro ao gerar dados completos: {str(e)}")
 
+def display_treatment_management(df):
+    """Display treatment management interface"""
+    treatment_manager = TreatmentManager()
+    
+    # Display treatment input interface
+    treatment_manager.display_treatment_input_interface()
+    
+    # If there are treatments, correlate with lesion data
+    if st.session_state.get('treatment_periods'):
+        st.subheader("🔗 Correlação com Evolução das Lesões")
+        
+        # Get data with treatment correlations
+        df_with_treatments = treatment_manager.correlate_treatments_with_lesions(df)
+        
+        # Display correlations
+        if not df_with_treatments.empty:
+            st.write("**Medições de lesões com tratamentos ativos no período:**")
+            
+            # Filter only rows with active treatments
+            active_treatment_rows = df_with_treatments[df_with_treatments['tratamentos_periodo'] != ""]
+            
+            if not active_treatment_rows.empty:
+                display_df = active_treatment_rows[['lesao_id', 'data_exame', 'tamanho_cm', 'tratamentos_periodo']].copy()
+                display_df.columns = ['Lesão', 'Data do Exame', 'Tamanho (cm)', 'Tratamentos Ativos']
+                display_df['Data do Exame'] = pd.to_datetime(display_df['Data do Exame']).dt.strftime('%d/%m/%Y')
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info("Nenhuma medição de lesão coincide com os períodos de tratamento registrados.")
+        
+        # Treatment timeline visualization
+        st.subheader("📅 Linha do Tempo dos Tratamentos")
+        treatment_timeline = treatment_manager.get_treatment_timeline()
+        
+        if treatment_timeline:
+            for treatment in treatment_timeline:
+                status_color = "🟢" if treatment["ativo"] else "🔴"
+                periodo = f"{treatment['inicio']}"
+                if treatment['fim']:
+                    periodo += f" → {treatment['fim']}"
+                else:
+                    periodo += " → Em andamento"
+                
+                st.write(f"{status_color} **{treatment['nome']}** ({periodo})")
+
 def display_results():
     """Display analysis results and visualizations"""
     df = st.session_state.processed_data
@@ -212,18 +257,21 @@ def display_results():
     st.info(summary_text)
     
     # Tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 Visualizações", "📋 Tabela Resumida", "📅 Dados Detalhados", "💾 Downloads"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Visualizações", "💊 Tratamentos", "📋 Tabela Resumida", "📅 Dados Detalhados", "💾 Downloads"])
     
     with tab1:
         display_visualizations(analysis_results)
     
     with tab2:
-        display_summary_table(analysis_results)
+        display_treatment_management(df)
     
     with tab3:
-        display_detailed_data(df)
+        display_summary_table(analysis_results)
     
     with tab4:
+        display_detailed_data(df)
+    
+    with tab5:
         display_download_options(df, analysis_results)
 
 def display_visualizations(analysis_results):
