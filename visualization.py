@@ -9,6 +9,7 @@ import seaborn as sns
 # Set matplotlib style for medical reports
 plt.style.use('default')
 sns.set_palette("husl")
+plt.rcParams['figure.facecolor'] = 'white'
 
 class VisualizationGenerator:
     """Handles chart generation for lesion evolution analysis"""

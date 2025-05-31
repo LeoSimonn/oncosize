@@ -6,6 +6,8 @@ from pdf_processor import PDFProcessor
 from data_analyzer import DataAnalyzer
 from visualization import VisualizationGenerator
 from utils import format_summary_table, format_detailed_table
+from synthetic_data_generator import SyntheticDataGenerator
+from lesion_grouper import LesionGrouper
 import io
 
 def main():
@@ -42,6 +44,21 @@ def main():
             
             if st.button("🔍 Processar Laudos", type="primary"):
                 process_files(uploaded_files)
+        
+        st.divider()
+        
+        # Demo data for testing
+        st.subheader("🧪 Dados para Demonstração")
+        st.info("Para testar o sistema sem PDFs, use dados sintéticos")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📊 Gerar Dados Demo", help="Dados sintéticos para demonstração"):
+                generate_demo_data()
+        
+        with col2:
+            if st.button("🔄 Dados Completos", help="Dataset completo para análise"):
+                generate_full_demo_data()
         
         # Option to clear current session
         if st.session_state.processed_data is not None:
@@ -102,12 +119,17 @@ def process_files(uploaded_files):
             # Convert to DataFrame
             df = pd.DataFrame(all_data)
             
+            # Group similar lesions
+            status_text.text("Agrupando lesões similares...")
+            lesion_grouper = LesionGrouper()
+            df_grouped = lesion_grouper.group_similar_lesions(df)
+            
             # Analyze data
             status_text.text("Analisando dados e calculando variações...")
-            analysis_results = data_analyzer.analyze_lesion_evolution(df)
+            analysis_results = data_analyzer.analyze_lesion_evolution(df_grouped)
             
             # Store results in session state
-            st.session_state.processed_data = df
+            st.session_state.processed_data = df_grouped
             st.session_state.analysis_results = analysis_results
             st.session_state.charts_generated = False
             
@@ -124,6 +146,58 @@ def process_files(uploaded_files):
     finally:
         progress_bar.empty()
         status_text.empty()
+
+def generate_demo_data():
+    """Generate demo data for testing"""
+    try:
+        synthetic_generator = SyntheticDataGenerator()
+        demo_data = synthetic_generator.generate_demo_button_data()
+        
+        # Convert to DataFrame and group lesions
+        df = pd.DataFrame(demo_data)
+        lesion_grouper = LesionGrouper()
+        df_grouped = lesion_grouper.group_similar_lesions(df)
+        
+        # Analyze data
+        data_analyzer = DataAnalyzer()
+        analysis_results = data_analyzer.analyze_lesion_evolution(df_grouped)
+        
+        # Store in session state
+        st.session_state.processed_data = df_grouped
+        st.session_state.analysis_results = analysis_results
+        st.session_state.charts_generated = False
+        
+        st.success("✅ Dados de demonstração carregados!")
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"Erro ao gerar dados demo: {str(e)}")
+
+def generate_full_demo_data():
+    """Generate comprehensive demo data"""
+    try:
+        synthetic_generator = SyntheticDataGenerator()
+        full_data = synthetic_generator.generate_patient_data(num_exams=8, num_lesions=6)
+        
+        # Convert to DataFrame and group lesions
+        df = pd.DataFrame(full_data)
+        lesion_grouper = LesionGrouper()
+        df_grouped = lesion_grouper.group_similar_lesions(df)
+        
+        # Analyze data
+        data_analyzer = DataAnalyzer()
+        analysis_results = data_analyzer.analyze_lesion_evolution(df_grouped)
+        
+        # Store in session state
+        st.session_state.processed_data = df_grouped
+        st.session_state.analysis_results = analysis_results
+        st.session_state.charts_generated = False
+        
+        st.success("✅ Dataset completo carregado!")
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"Erro ao gerar dados completos: {str(e)}")
 
 def display_results():
     """Display analysis results and visualizations"""
